@@ -3,6 +3,9 @@
 #include <time.h>
 #include <stdlib.h>
 
+// comment out developer mode to hide developer overlay
+#define DEVELOPER_MODE
+
 const int screenWidth = 1920;
 const int screenHeight = 1080;
 const float drag = 0.99f;     // default drag when not pressing W
@@ -10,14 +13,22 @@ const float brakeDrag = 0.9f; // drag when pressing S
 const int targetFPS = 60;
 const int maxBullets = 300;             // amount of bullets shot before they are recycled
 const float defaultFireCooldown = 0.1f; // time between shots in seconds
-const int maxAsteroids = 100;           // amount of asteroids before they are recycled
-const float timeBetweenAsteroidSpawn = 1;
+const int maxAsteroids = 2;             // amount of asteroids before they are recycled
+const float timeBetweenAsteroidSpawn = 10;
 const float asteroidSpeedConstant = 200; // min speed will be this/max size, max speed will be this/min size
 const int asteroidMaxSize = 100;
 const int asteroidMinSize = 30;
 const float invincibleDuration = 2; // invincibility time after taking damage in seconds
 
-typedef struct
+typedef enum game_state_e
+{
+    gameStatePlaying,
+    gameStateDead
+} game_state_e;
+
+    game_state_e state = gameStatePlaying;
+
+typedef struct entity_t
 {
     Vector2 center;
     Vector2 velocity;
@@ -26,47 +37,37 @@ typedef struct
     float speed;
     float size;
     float hp;
-} entity;
+} entity_t;
 
-void InitGame(entity *player, entity *bullet, entity *asteroid, int *score)
+typedef struct player_data {
+    entity_t *player,
+    bool *playerIsInvincible,
+    bool *playerIsWhite,
+    bool *timeSpentInvisible,
+
+
+} player_data;
+
+
+
+
+
+void SpawnAsteroid(entity_t *asteroid, Vector2 center, float size, float angle, int *asteroidPointer)
 {
-    // init player
-    *player = (entity){.center = (Vector2){screenWidth / 2, screenHeight / 2},
-                       .velocity = (Vector2){0, 0},
-                       .angle = 0,
-                       .rotation = 0.1f,
-                       .speed = 5.0f,
-                       .size = 50.0f,
-                       .hp = 5};
-
-    // init bullets
-    for (int i = 0; i < maxBullets; i++)
-    {
-        bullet[i] = (entity){
-            .center = {-10, -10},
-            .velocity = {0, 0},
-            .angle = 0,
-            .rotation = 0,
-            .speed = 15,
-            .size = 5,
-            .hp = 1};
-    }
-
-    // init asteroids
-    for (int i = 0; i < maxAsteroids; i++)
-    {
-        asteroid[i] = (entity){
-            .center = {-25, -25},
-            .velocity = {0, 0},
-            .angle = 0,
-            .rotation = 0,
-            .speed = 3,
-            .size = 25,
-            .hp = 10};
-    }
-
-    score = 0;
+    float hp = size / 5;
+    float speed = asteroidSpeedConstant / size;
+    Vector2 velocity = {speed * cos(angle),
+                        speed * sin(angle)};
+    *asteroid = (entity_t){
+        .center = center,
+        .velocity = velocity,
+        .angle = angle,
+        .speed = speed,
+        .size = size,
+        .hp = hp};
+    *asteroidPointer = *asteroidPointer >= (maxAsteroids - 1) ? 0 : *asteroidPointer + 1;
 }
+
 void GetRandomAsteroidSpawn(Vector2 *center, float *angle, float size)
 {
     switch (rand() % 4)
@@ -96,45 +97,101 @@ void GetRandomAsteroidSpawn(Vector2 *center, float *angle, float size)
         break;
     }
 }
-void SpawnAsteroid(entity *asteroid, Vector2 center, float size, float angle, int *asteroidPointer)
+
+void Render() {
+        switch(state) {
+            case gameStatePlaying:
+
+            break;
+            case gameStateDead:
+            break;
+        }
+}
+
+void Update() {
+        switch(state) {
+            case gameStatePlaying:
+            break;
+            case gameStateDead:
+            break;
+        }
+}
+
+void InitGame(entity_t *player, entity_t *bullet, entity_t *asteroid, int *score)
 {
-    float hp = size / 5;
-    float speed = asteroidSpeedConstant / size;
-    Vector2 velocity = {speed * cos(angle),
-                        speed * sin(angle)};
-    *asteroid = (entity){
-        .center = center,
-        .velocity = velocity,
-        .angle = angle,
-        .speed = speed,
-        .size = size,
-        .hp = hp};
-        *asteroidPointer >= maxAsteroids - 1 ? *asteroidPointer = 0 : *asteroidPointer++;
+    // init player
+    *player = (entity_t){.center = (Vector2){screenWidth / 2, screenHeight / 2},
+                       .velocity = (Vector2){0, 0},
+                       .angle = 0,
+                       .rotation = 0.1f,
+                       .speed = 5.0f,
+                       .size = 50.0f,
+                       .hp = 5};
+
+    // init bullets
+    for (int i = 0; i < maxBullets; i++)
+    {
+        bullet[i] = (entity_t){
+            .center = {-10, -10},
+            .velocity = {0, 0},
+            .angle = 0,
+            .rotation = 0,
+            .speed = 15,
+            .size = 5,
+            .hp = 1};
+    }
+
+    // init asteroids
+    for (int i = 0; i < maxAsteroids; i++)
+    {
+        asteroid[i] = (entity_t){
+            .center = {-25, -25},
+            .velocity = {0, 0},
+            .angle = 0,
+            .rotation = 0,
+            .speed = 3,
+            .size = 25,
+            .hp = 10};
+    }
+
+    *score = 0;
+    state = gameStatePlaying;
 }
 int main()
 {
+    
     srand(time(NULL));
     InitWindow(screenWidth, screenHeight, "asteroids");
     SetTargetFPS(targetFPS);
-    entity player;
+    entity_t player;
 
     bool playerIsInvincible = false;
     bool playerIsWhite = false;
     float timeSpentInvincible = 0;
     float invincibleColorSwitchCheck = 0; // will switch from white to red ship based on how long you have been invincible
+
     int score = 0;
 
-    entity bullet[maxBullets];
+    entity_t bullet[maxBullets];
     int bulletPointer = 0;
     float timeSinceLastShot = 0;
     float fireCooldown = defaultFireCooldown;
 
-    entity asteroid[maxAsteroids];
+    entity_t asteroid[maxAsteroids];
     int asteroidPointer = 0;
     float timeSinceLastAstroidSpawn = 0;
     InitGame(&player, bullet, asteroid, &score);
+
     while (!WindowShouldClose())
     {
+
+        Update();
+        Render();
+
+
+
+        // Player death check:
+        // NOTE(sampax): THIS MAY CAUSE A CONTIUE!!!
         if (player.hp <= 0)
         {
             BeginDrawing();
@@ -146,7 +203,7 @@ int main()
                      (screenWidth - 100) / 2, (screenHeight - 100) / 2, 50, GREEN);
             if (IsKeyDown(KEY_R))
             {
-                InitGame(&player, bullet, asteroid, &score);
+                InitGame(&player, bullet, asteroid, &score, &state);
                 timeSpentInvincible = invincibleDuration; // this will essentially init invincibility
             }
             else
@@ -171,6 +228,7 @@ int main()
             timeSpentInvincible = 0;
             invincibleColorSwitchCheck = 0;
         }
+        
         // get player input
         if (IsKeyDown(KEY_A))
             player.angle -= player.rotation;
@@ -206,6 +264,7 @@ int main()
         Vector2 triangleC = {player.center.x + player.size * cos(player.angle),
                              player.center.y + player.size * sin(player.angle)};
 
+        // Player shoot logic:
         if (IsKeyDown(KEY_SPACE))
         {
             if (timeSinceLastShot > fireCooldown)
@@ -231,13 +290,14 @@ int main()
             float angle = 0;
             GetRandomAsteroidSpawn(&center, &angle, size);
             SpawnAsteroid(&asteroid[asteroidPointer], center, size, angle, &asteroidPointer);
-            
         }
 
         int bulletsOnScreen[maxBullets];
         int bulletsOnScreenPointer = 0;
         int asteroidsOnScreen[maxAsteroids];
         int asteroidsOnScreenPointer = 0;
+
+        // RENDER ////////////////////////////////////////////////////////////////////
         BeginDrawing();
         ClearBackground(BLACK);
 
@@ -295,7 +355,7 @@ int main()
                         float newSpeed = asteroid[asteroidsOnScreen[j]].speed * 2;
                         float newSize = asteroid[asteroidsOnScreen[j]].size / 2;
                         float newHP = newSize / 5;
-                        asteroid[asteroidPointer] = (entity){
+                        asteroid[asteroidPointer] = (entity_t){
                             .center = {asteroid[asteroidsOnScreen[j]].center.x + (asteroid[asteroidsOnScreen[j]].size * cos(bullet[bulletsOnScreen[i]].angle + PI / 2) / 2),
                                        asteroid[asteroidsOnScreen[j]].center.y + (asteroid[asteroidsOnScreen[j]].size * sin(bullet[bulletsOnScreen[i]].angle + PI / 2) / 2)},
                             .velocity = {newSpeed * cos(bullet[bulletsOnScreen[i]].angle + PI / 2),
@@ -304,8 +364,8 @@ int main()
                             .speed = newSpeed,
                             .size = newSize,
                             .hp = newHP};
-                        asteroidPointer >= maxAsteroids - 1 ? 0 : asteroidPointer++;
-                        asteroid[asteroidPointer] = (entity){
+                        asteroidPointer = asteroidPointer >= maxAsteroids - 1 ? 0 : asteroidPointer + 1;
+                        asteroid[asteroidPointer] = (entity_t){
                             .center = {asteroid[asteroidsOnScreen[j]].center.x + (asteroid[asteroidsOnScreen[j]].size * cos(bullet[bulletsOnScreen[i]].angle + (3 * PI / 2)) / 2),
                                        asteroid[asteroidsOnScreen[j]].center.y + (asteroid[asteroidsOnScreen[j]].size * sin(bullet[bulletsOnScreen[i]].angle + (3 * PI / 2)) / 2)},
                             .velocity = {newSpeed * cos(bullet[bulletsOnScreen[i]].angle + (3 * PI / 2)),
@@ -314,7 +374,7 @@ int main()
                             .speed = newSpeed,
                             .size = newSize,
                             .hp = newHP};
-                        asteroidPointer >= maxAsteroids - 1 ? 0 : asteroidPointer++;
+                        asteroidPointer = asteroidPointer >= maxAsteroids - 1 ? 0 : asteroidPointer + 1;
                     }
                     else if (asteroid[asteroidsOnScreen[j]].hp <= 0)
                     {
@@ -323,6 +383,7 @@ int main()
                 }
             }
         }
+#ifdef DEVELOPER_MODE
         DrawText(TextFormat("bullets on screen:   %i\n"
                             "bullet pointer:      %i\n"
                             "asteroids on screen: %i\n"
@@ -330,6 +391,7 @@ int main()
                             "asteroid 0 x.y :     %.2f.%.2f",
                             bulletsOnScreenPointer, bulletPointer, asteroidsOnScreenPointer, asteroidPointer, asteroid[0].center.x, asteroid[0].center.y),
                  10, 10, 25, GREEN);
+#endif
         // DrawText(TextFormat("lives remaining: %.0f\n"
         //                     "score:            %i",
         //                     player.hp, score),
@@ -347,7 +409,9 @@ int main()
         {
             DrawTriangle(triangleA, triangleB, triangleC, RED);
         }
+        
         DrawCircleV(triangleC, 3, GREEN);
+        DrawCircleV(player.center, 3, GREEN);
         EndDrawing();
     }
     CloseWindow();
