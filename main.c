@@ -26,7 +26,7 @@ typedef enum game_state_e
     gameStateDead
 } game_state_e;
 
-    game_state_e state = gameStatePlaying;
+game_state_e state = gameStatePlaying;
 
 typedef struct entity_t
 {
@@ -39,18 +39,45 @@ typedef struct entity_t
     float hp;
 } entity_t;
 
-typedef struct player_data {
-    entity_t *player,
-    bool *playerIsInvincible,
-    bool *playerIsWhite,
-    bool *timeSpentInvisible,
+typedef struct player_data_t
+{
+    entity_t *player;
+    bool *playerIsInvincible;
+    bool *playerIsWhite;
+    float *timeSpentInvincible;
+    float *invincibleColorSwitchCheck;
+    int *score;
+    Vector2 *triangleA;
+    Vector2 *triangleB;
+    Vector2 *triangleC;
+} player_data_t;
 
+typedef struct bullet_data_t
+{
+    entity_t *bullet;
+    int *bulletPointer;
+    float *timeSinceLastShot;
+    float *fireCooldown;
+} bullet_data_t;
 
-} player_data;
+typedef struct asteroid_data_t
+{
+    entity_t *asteroid;
+    int *asteroidPointer;
+    float *timeSinceLastAsteroidSpawn;
+} asteroid_data_t;
 
+void Render(player_data_t playerData, bullet_data_t bulletData, asteroid_data_t asteroidData)
+{
+    switch (state)
+    {
+    case gameStatePlaying:
 
-
-
+        break;
+    case gameStateDead:
+        break;
+    }
+}
 
 void SpawnAsteroid(entity_t *asteroid, Vector2 center, float size, float angle, int *asteroidPointer)
 {
@@ -98,35 +125,113 @@ void GetRandomAsteroidSpawn(Vector2 *center, float *angle, float size)
     }
 }
 
-void Render() {
-        switch(state) {
-            case gameStatePlaying:
-
-            break;
-            case gameStateDead:
-            break;
-        }
+void UpdatePlayerPosition(entity_t *player)
+{
+    player->center.x += player->velocity.x;
+    player->center.y += player->velocity.y;
 }
 
-void Update() {
-        switch(state) {
-            case gameStatePlaying:
-            break;
-            case gameStateDead:
-            break;
+void SpawnBullet(entity_t *bullet, int *bulletPointer, double playerAngle, Vector2 playerFront)
+{
+    bullet[*bulletPointer].angle = playerAngle;
+    bullet[*bulletPointer].velocity.x = bullet[*bulletPointer].speed * cos(playerAngle);
+    bullet[*bulletPointer].velocity.y = bullet[*bulletPointer].speed * sin(playerAngle);
+    bullet[*bulletPointer].center = playerFront;
+    bullet[*bulletPointer].hp = 1;
+}
+
+void CalculatePlayerPosition(player_data_t playerData)
+{
+    entity_t player = *playerData.player; // copied for simplicity in code
+    *playerData.triangleA = (Vector2){player.center.x + 2 * player.size / 3 * cos(player.angle + 2 * PI - ((4 * PI) / 6)),
+                                      player.center.y + 2 * player.size / 3 * sin(player.angle + 2 * PI - ((4 * PI) / 6))};
+
+    *playerData.triangleB = (Vector2){player.center.x + 2 * player.size / 3 * cos(player.angle + (4 * PI) / 6),
+                                      player.center.y + 2 * player.size / 3 * sin(player.angle + (4 * PI) / 6)};
+
+    *playerData.triangleC = (Vector2){player.center.x + player.size * cos(player.angle),
+                                      player.center.y + player.size * sin(player.angle)};
+}
+
+void HandlePlayerInput(entity_t *player, bullet_data_t bulletData, Vector2 playerFront)
+{
+    if (IsKeyDown(KEY_A))
+        player->angle -= player->rotation;
+    if (IsKeyDown(KEY_D))
+        player->angle += player->rotation;
+    if (IsKeyDown(KEY_W))
+    {
+        player->velocity.x = player->speed * cos(player->angle);
+        player->velocity.y = player->speed * sin(player->angle);
+    }
+    else
+    {
+        player->velocity.x *= drag;
+        player->velocity.y *= drag;
+    }
+    if (IsKeyDown(KEY_S))
+    {
+        player->velocity.x *= brakeDrag;
+        player->velocity.y *= brakeDrag;
+    }
+    if (IsKeyDown(KEY_SPACE))
+    {
+        if (*bulletData.timeSinceLastShot >= *bulletData.fireCooldown)
+        {
+            SpawnBullet(bulletData.bullet, bulletData.bulletPointer, player->angle, playerFront);
         }
+    }
+}
+
+void HandleInvincibility(player_data_t playerData)
+{
+    if (*playerData.playerIsInvincible)
+    {
+        *playerData.timeSpentInvincible += GetFrameTime();
+        // this will make the ship switch between white and red faster and faster
+        *playerData.invincibleColorSwitchCheck += powf(20, (*playerData.timeSpentInvincible / invincibleDuration));
+    }
+    // if invincible duration is over
+    if (*playerData.timeSpentInvincible >= invincibleDuration)
+    {
+        *playerData.playerIsInvincible = false;
+        *playerData.playerIsWhite = false;
+        *playerData.timeSpentInvincible = 0;
+        *playerData.invincibleColorSwitchCheck = 0;
+    }
+}
+
+void UpdateTimeVariables(float *timeSinceLastShot, float *timeSinceLastAstroidSpawn)
+{
+    *timeSinceLastShot += GetFrameTime();
+    *timeSinceLastAstroidSpawn += GetFrameTime();
+}
+
+void Update(player_data_t playerData, bullet_data_t bulletData, asteroid_data_t asteroidData)
+{
+    switch (state)
+    {
+    case gameStatePlaying:
+        UpdateTimeVariables(bulletData.timeSinceLastShot, asteroidData.timeSinceLastAsteroidSpawn);
+        HandleInvincibility(playerData);
+        HandlePlayerInput(playerData.player, bulletData, *playerData.triangleC);
+        UpdatePlayerPosition(playerData.player);
+        break;
+    case gameStateDead:
+        break;
+    }
 }
 
 void InitGame(entity_t *player, entity_t *bullet, entity_t *asteroid, int *score)
 {
     // init player
     *player = (entity_t){.center = (Vector2){screenWidth / 2, screenHeight / 2},
-                       .velocity = (Vector2){0, 0},
-                       .angle = 0,
-                       .rotation = 0.1f,
-                       .speed = 5.0f,
-                       .size = 50.0f,
-                       .hp = 5};
+                         .velocity = (Vector2){0, 0},
+                         .angle = 0,
+                         .rotation = 0.1f,
+                         .speed = 5.0f,
+                         .size = 50.0f,
+                         .hp = 5};
 
     // init bullets
     for (int i = 0; i < maxBullets; i++)
@@ -159,7 +264,7 @@ void InitGame(entity_t *player, entity_t *bullet, entity_t *asteroid, int *score
 }
 int main()
 {
-    
+
     srand(time(NULL));
     InitWindow(screenWidth, screenHeight, "asteroids");
     SetTargetFPS(targetFPS);
@@ -169,26 +274,56 @@ int main()
     bool playerIsWhite = false;
     float timeSpentInvincible = 0;
     float invincibleColorSwitchCheck = 0; // will switch from white to red ship based on how long you have been invincible
-
     int score = 0;
+
+    Vector2 triangleA = {player.center.x + 2 * player.size / 3 * cos(player.angle + 2 * PI - ((4 * PI) / 6)),
+                         player.center.y + 2 * player.size / 3 * sin(player.angle + 2 * PI - ((4 * PI) / 6))};
+
+    Vector2 triangleB = {player.center.x + 2 * player.size / 3 * cos(player.angle + (4 * PI) / 6),
+                         player.center.y + 2 * player.size / 3 * sin(player.angle + (4 * PI) / 6)};
+
+    Vector2 triangleC = {player.center.x + player.size * cos(player.angle),
+                         player.center.y + player.size * sin(player.angle)};
+
+    // values are assigned their own structs for better readability and less parameters for some functions
+    player_data_t playerData = {
+        .player = &player,
+        .playerIsInvincible = &playerIsInvincible,
+        .playerIsWhite = &playerIsWhite,
+        .timeSpentInvincible = &timeSpentInvincible,
+        .invincibleColorSwitchCheck = &invincibleColorSwitchCheck,
+        .score = &score,
+        .triangleA = &triangleA,
+        .triangleB = &triangleB,
+        .triangleC = &triangleC};
 
     entity_t bullet[maxBullets];
     int bulletPointer = 0;
     float timeSinceLastShot = 0;
     float fireCooldown = defaultFireCooldown;
 
+    bullet_data_t bulletData = {
+        .bullet = bullet,
+        .bulletPointer = &bulletPointer,
+        .timeSinceLastShot = &timeSinceLastShot,
+        .fireCooldown = &fireCooldown};
+
     entity_t asteroid[maxAsteroids];
     int asteroidPointer = 0;
     float timeSinceLastAstroidSpawn = 0;
-    InitGame(&player, bullet, asteroid, &score);
+
+    asteroid_data_t asteroidData = {
+        .asteroid = asteroid,
+        .asteroidPointer = &asteroidPointer,
+        .timeSinceLastAsteroidSpawn = &timeSinceLastAstroidSpawn};
+
+    InitGame(playerData.player, bulletData.bullet, asteroidData.asteroid, playerData.score);
 
     while (!WindowShouldClose())
     {
 
-        Update();
-        Render();
-
-
+        Update(playerData, bulletData, asteroidData);
+        Render(playerData, bulletData, asteroidData);
 
         // Player death check:
         // NOTE(sampax): THIS MAY CAUSE A CONTIUE!!!
@@ -203,7 +338,7 @@ int main()
                      (screenWidth - 100) / 2, (screenHeight - 100) / 2, 50, GREEN);
             if (IsKeyDown(KEY_R))
             {
-                InitGame(&player, bullet, asteroid, &score, &state);
+                InitGame(&player, bullet, asteroid, &score);
                 timeSpentInvincible = invincibleDuration; // this will essentially init invincibility
             }
             else
@@ -228,7 +363,7 @@ int main()
             timeSpentInvincible = 0;
             invincibleColorSwitchCheck = 0;
         }
-        
+
         // get player input
         if (IsKeyDown(KEY_A))
             player.angle -= player.rotation;
@@ -409,7 +544,7 @@ int main()
         {
             DrawTriangle(triangleA, triangleB, triangleC, RED);
         }
-        
+
         DrawCircleV(triangleC, 3, GREEN);
         DrawCircleV(player.center, 3, GREEN);
         EndDrawing();
