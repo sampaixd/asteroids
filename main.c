@@ -58,6 +58,8 @@ typedef struct bullet_data_t
     int *bulletPointer;
     float *timeSinceLastShot;
     float *fireCooldown;
+    int *bulletsOnScreen;
+    int *bulletsOnScreenPointer;
 } bullet_data_t;
 
 typedef struct asteroid_data_t
@@ -65,20 +67,81 @@ typedef struct asteroid_data_t
     entity_t *asteroid;
     int *asteroidPointer;
     float *timeSinceLastAsteroidSpawn;
+    int *asteroidsOnScreen;
+    int *asteroidsOnScreenPointer;
 } asteroid_data_t;
+// TODO figure out where to put this
+/*void CheckForPlayerAsteroidCollision() {
+    if ((CheckCollisionPointCircle(triangleA, asteroid.center, asteroid.size) ||
+                     CheckCollisionPointCircle(triangleB, asteroid.center, asteroid.size) ||
+                     CheckCollisionPointCircle(triangleC, asteroid.center, asteroid.size)) &&
+                    !playerIsInvincible)
+                {
+                    player.hp--;
+                    playerIsInvincible = true;
+                    playerIsWhite = true;
+                }
+}*/
+
+void RenderAsteroids(asteroid_data_t asteroidData) {
+    for (int i = 0; i < maxAsteroids; i++)
+        { // - 5 since starting pos will be -asteroid[i].size at times
+            entity_t asteroid = asteroidData.asteroid[i];
+            if ((asteroid.center.x >= -asteroid.size - 5 && asteroid.center.x <= screenWidth + asteroid.size + 5) &&
+                (asteroid.center.y >= -asteroid.size - 5 && asteroid.center.y <= screenHeight + asteroid.size + 5) &&
+                asteroid.hp > 0)
+            {
+                asteroidData.asteroidsOnScreen[*asteroidData.asteroidsOnScreenPointer] = i;
+                *asteroidData.asteroidsOnScreenPointer++;
+                asteroid.center.x += asteroid.velocity.x;
+                asteroid.center.y += asteroid.velocity.y;
+                DrawCircleV(asteroid.center, asteroid.size, BROWN);
+                DrawText(TextFormat("%i-%.2f", i, asteroid.size), asteroid.center.x, asteroid.center.y, 10, GREEN);
+            }
+        }
+}
+
+void RenderBullets(bullet_data_t bulletData) {
+    for (int i = 0; i < maxBullets; i++)
+        {
+            entity_t bullet = bulletData.bullet[i];
+
+            if ((bullet.center.x >= -bullet.size && bullet.center.x <= screenWidth + bullet.size) &&
+                (bullet.center.y >= -bullet.size && bullet.center.y <= screenHeight + bullet.size) &&
+                bullet.hp > 0)
+            {
+                bulletData.bulletsOnScreen[*bulletData.bulletsOnScreenPointer] = i;
+                *bulletData.bulletsOnScreenPointer++;
+                bullet.center.x += bullet.velocity.x;
+                bullet.center.y += bullet.velocity.y;
+                DrawCircleV(bullet.center, bullet.size, BLUE);
+            }
+        }
+}
 
 void Render(player_data_t playerData, bullet_data_t bulletData, asteroid_data_t asteroidData)
 {
     switch (state)
     {
     case gameStatePlaying:
-
+        RenderBullets(bulletData);
         break;
     case gameStateDead:
         break;
     }
 }
-
+void SpawnAsteroid(entity_t *asteroid, int *asteroidPointer)
+{
+    float hp = asteroid->size / 5;
+    float speed = asteroidSpeedConstant / asteroid->size;
+    Vector2 velocity = {speed * cos(asteroid->angle),
+                        speed * sin(asteroid->angle)};
+    *asteroid = (entity_t){
+        .velocity = velocity,
+        .speed = speed,
+        .hp = hp};
+    *asteroidPointer = *asteroidPointer >= (maxAsteroids - 1) ? 0 : *asteroidPointer + 1;
+}
 void SpawnAsteroid(entity_t *asteroid, Vector2 center, float size, float angle, int *asteroidPointer)
 {
     float hp = size / 5;
@@ -95,35 +158,47 @@ void SpawnAsteroid(entity_t *asteroid, Vector2 center, float size, float angle, 
     *asteroidPointer = *asteroidPointer >= (maxAsteroids - 1) ? 0 : *asteroidPointer + 1;
 }
 
-void GetRandomAsteroidSpawn(Vector2 *center, float *angle, float size)
+void GetRandomAsteroidSpawn(entity_t *asteroid)
 {
+    float size = (rand() % (asteroidMaxSize - asteroidMinSize + 1)) + asteroidMinSize; // picks a random value between the min and max asteroid size
+    asteroid->size = size;
     switch (rand() % 4)
     {
     case 0: // start in left corner
-        center->x = -size;
-        center->y = rand() % screenHeight;
-        *angle = (rand() % (int)(100 * PI) / 100) - PI / 2; // (-90)-90 degrees
+        asteroid->center.x = -asteroid->size;
+        asteroid->center.y = rand() % screenHeight;
+        asteroid->angle = (rand() % (int)(100 * PI) / 100) - PI / 2; // (-90)-90 degrees
         break;
 
     case 1: // start in right corner
-        center->x = screenWidth + size;
-        center->y = rand() % screenHeight;
-        *angle = (rand() % (int)(100 * PI) / 100) + PI / 2; // 90-270 degrees
+        asteroid->center.x = screenWidth + size;
+        asteroid->center.y = rand() % screenHeight;
+        asteroid->angle = (rand() % (int)(100 * PI) / 100) + PI / 2; // 90-270 degrees
         break;
 
     case 2: // start in bottom
-        center->x = rand() % screenWidth;
-        center->y = -size;
-        *angle = (rand() % (int)(100 * PI) / 100); // 0-180 degrees
+        asteroid->center.x = rand() % screenWidth;
+        asteroid->center.y = -size;
+        asteroid->angle = (rand() % (int)(100 * PI) / 100); // 0-180 degrees
         break;
 
     case 3: // start in top
-        center->x = rand() % screenWidth;
-        center->y = screenHeight + size;
-        *angle = (rand() % (int)(100 * PI) / 100) + PI; // 180-360 degrees
+        asteroid->center.x = rand() % screenWidth;
+        asteroid->center.y = screenHeight + size;
+        asteroid->angle = (rand() % (int)(100 * PI) / 100) + PI; // 180-360 degrees
         break;
     }
 }
+// checks if astroid should spawn, and spawns one if it should
+void HandleAstroidSpawn(asteroid_data_t asteroidData)
+{
+    if (*asteroidData.timeSinceLastAsteroidSpawn >= *asteroidData.timeSinceLastAsteroidSpawn)
+    {
+        GetRandomAsteroidSpawn(&asteroidData.asteroid[*asteroidData.asteroidPointer]);
+        SpawnAsteroid(&asteroidData.asteroid[*asteroidData.asteroidPointer], asteroidData.asteroidPointer);
+    }
+}
+
 
 void UpdatePlayerPosition(entity_t *player)
 {
@@ -216,6 +291,7 @@ void Update(player_data_t playerData, bullet_data_t bulletData, asteroid_data_t 
         HandleInvincibility(playerData);
         HandlePlayerInput(playerData.player, bulletData, *playerData.triangleC);
         UpdatePlayerPosition(playerData.player);
+        HandleAstroidSpawn(asteroidData);
         break;
     case gameStateDead:
         break;
@@ -301,21 +377,29 @@ int main()
     int bulletPointer = 0;
     float timeSinceLastShot = 0;
     float fireCooldown = defaultFireCooldown;
+    int bulletsOnScreen[maxBullets];
+    int bulletsOnScreenPointer = 0;
 
     bullet_data_t bulletData = {
         .bullet = bullet,
         .bulletPointer = &bulletPointer,
         .timeSinceLastShot = &timeSinceLastShot,
-        .fireCooldown = &fireCooldown};
+        .fireCooldown = &fireCooldown,
+        .bulletsOnScreen = bulletsOnScreen,
+        .bulletsOnScreenPointer = &bulletsOnScreenPointer};
 
     entity_t asteroid[maxAsteroids];
     int asteroidPointer = 0;
     float timeSinceLastAstroidSpawn = 0;
+    int asteroidsOnScreen[maxAsteroids];
+    int asteroidsOnScreenPointer = 0;
 
     asteroid_data_t asteroidData = {
         .asteroid = asteroid,
         .asteroidPointer = &asteroidPointer,
-        .timeSinceLastAsteroidSpawn = &timeSinceLastAstroidSpawn};
+        .timeSinceLastAsteroidSpawn = &timeSinceLastAstroidSpawn,
+        .asteroidsOnScreen = asteroidsOnScreen,
+        .asteroidsOnScreenPointer = &asteroidsOnScreenPointer};
 
     InitGame(playerData.player, bulletData.bullet, asteroidData.asteroid, playerData.score);
 
@@ -324,113 +408,6 @@ int main()
 
         Update(playerData, bulletData, asteroidData);
         Render(playerData, bulletData, asteroidData);
-
-        // Player death check:
-        // NOTE(sampax): THIS MAY CAUSE A CONTIUE!!!
-        if (player.hp <= 0)
-        {
-            BeginDrawing();
-            ClearBackground(BLACK);
-            DrawText(TextFormat("GAME OVER!\n"
-                                "YOUR SCORE IS: %i\n"
-                                "PRESS R TO RESTART",
-                                score),
-                     (screenWidth - 100) / 2, (screenHeight - 100) / 2, 50, GREEN);
-            if (IsKeyDown(KEY_R))
-            {
-                InitGame(&player, bullet, asteroid, &score);
-                timeSpentInvincible = invincibleDuration; // this will essentially init invincibility
-            }
-            else
-            {
-                EndDrawing();
-                continue;
-            }
-        }
-
-        // time based variables updated
-        if (playerIsInvincible)
-        {
-            timeSpentInvincible += GetFrameTime();
-            invincibleColorSwitchCheck += powf(20, (timeSpentInvincible / invincibleDuration));
-        }
-        timeSinceLastShot += GetFrameTime();
-        timeSinceLastAstroidSpawn += GetFrameTime();
-        if (timeSpentInvincible >= invincibleDuration)
-        {
-            playerIsInvincible = false;
-            playerIsWhite = false;
-            timeSpentInvincible = 0;
-            invincibleColorSwitchCheck = 0;
-        }
-
-        // get player input
-        if (IsKeyDown(KEY_A))
-            player.angle -= player.rotation;
-        if (IsKeyDown(KEY_D))
-            player.angle += player.rotation;
-        if (IsKeyDown(KEY_W))
-        {
-            player.velocity.x = player.speed * cos(player.angle);
-            player.velocity.y = player.speed * sin(player.angle);
-        }
-        else
-        {
-            player.velocity.x *= drag;
-            player.velocity.y *= drag;
-        }
-        if (IsKeyDown(KEY_S))
-        {
-            player.velocity.x *= brakeDrag;
-            player.velocity.y *= brakeDrag;
-        }
-
-        // player movement
-        player.center.x += player.velocity.x;
-        player.center.y += player.velocity.y;
-
-        // draw triangle around player center
-        Vector2 triangleA = {player.center.x + 2 * player.size / 3 * cos(player.angle + 2 * PI - ((4 * PI) / 6)),
-                             player.center.y + 2 * player.size / 3 * sin(player.angle + 2 * PI - ((4 * PI) / 6))};
-
-        Vector2 triangleB = {player.center.x + 2 * player.size / 3 * cos(player.angle + (4 * PI) / 6),
-                             player.center.y + 2 * player.size / 3 * sin(player.angle + (4 * PI) / 6)};
-
-        Vector2 triangleC = {player.center.x + player.size * cos(player.angle),
-                             player.center.y + player.size * sin(player.angle)};
-
-        // Player shoot logic:
-        if (IsKeyDown(KEY_SPACE))
-        {
-            if (timeSinceLastShot > fireCooldown)
-            {
-                bullet[bulletPointer].angle = player.angle;
-                bullet[bulletPointer].velocity.x = bullet[bulletPointer].speed * cos(player.angle);
-                bullet[bulletPointer].velocity.y = bullet[bulletPointer].speed * sin(player.angle);
-                bullet[bulletPointer].center = triangleC;
-                bullet[bulletPointer].hp = 1;
-                if (bulletPointer >= maxBullets - 1)
-                    bulletPointer = 0;
-                else
-                    bulletPointer++;
-                timeSinceLastShot = 0;
-            }
-        }
-
-        if (timeSinceLastAstroidSpawn > timeBetweenAsteroidSpawn)
-        {
-            float size = (rand() % (asteroidMaxSize - asteroidMinSize + 1)) + asteroidMinSize; // picks a random value between the min and max asteroid size
-            timeSinceLastAstroidSpawn = 0;
-            Vector2 center = {0, 0};
-            float angle = 0;
-            GetRandomAsteroidSpawn(&center, &angle, size);
-            SpawnAsteroid(&asteroid[asteroidPointer], center, size, angle, &asteroidPointer);
-        }
-
-        int bulletsOnScreen[maxBullets];
-        int bulletsOnScreenPointer = 0;
-        int asteroidsOnScreen[maxAsteroids];
-        int asteroidsOnScreenPointer = 0;
 
         // RENDER ////////////////////////////////////////////////////////////////////
         BeginDrawing();
